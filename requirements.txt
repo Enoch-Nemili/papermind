@@ -1,0 +1,5 @@
+# The web framework that turns our Python code into an API.
+fastapi
+
+# The server that actually runs FastAPI. [standard] adds nice extras like auto-reload.
+uvicorn[standard]

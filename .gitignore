@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+
+# Secrets / environment
+.env
+
+# Data & model artifacts (we don't commit big/generated files)
+data/
+*.db
+
+# macOS
+.DS_Store
+
+# Editors
+.vscode/
+.idea/
