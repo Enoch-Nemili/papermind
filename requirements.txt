@@ -21,3 +21,7 @@ langchain-ollama
 langchain-postgres
 # PostgreSQL driver used by langchain-postgres (psycopg 3).
 psycopg[binary]
+
+# --- Web frontend: file uploads ---
+# Lets FastAPI accept uploaded files (multipart/form-data).
+python-multipart
