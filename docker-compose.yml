@@ -1,0 +1,24 @@
+# docker-compose.yml
+# Describes the services (containers) our project needs.
+# Start everything with:  docker compose up -d
+# Stop it with:           docker compose down
+
+services:
+  db:
+    # A ready-made PostgreSQL image that already has the pgvector extension built in.
+    image: pgvector/pgvector:pg16
+    container_name: papermind-db
+    # These become the database's login + database name (fine for local development).
+    environment:
+      POSTGRES_USER: papermind
+      POSTGRES_PASSWORD: papermind
+      POSTGRES_DB: papermind
+    # Expose the database on the standard Postgres port so our app can reach it at localhost:5432.
+    ports:
+      - "5432:5432"
+    # Keep the data on disk (in a named volume) so it survives restarts.
+    volumes:
+      - papermind_pgdata:/var/lib/postgresql/data
+
+volumes:
+  papermind_pgdata:

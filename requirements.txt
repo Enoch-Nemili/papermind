@@ -1,5 +1,23 @@
+# --- Web API ---
 # The web framework that turns our Python code into an API.
 fastapi
-
 # The server that actually runs FastAPI. [standard] adds nice extras like auto-reload.
 uvicorn[standard]
+
+# --- RAG: loading & splitting documents ---
+# LangChain: the toolkit that glues the RAG steps together.
+langchain
+# Community loaders (includes the PDF loader we use).
+langchain-community
+# The text splitters (chunking).
+langchain-text-splitters
+# Reads text out of PDF files.
+pypdf
+
+# --- RAG: embedding & vector storage ---
+# Ollama integration (local embedding model + LLM).
+langchain-ollama
+# pgvector / Postgres vector store integration.
+langchain-postgres
+# PostgreSQL driver used by langchain-postgres (psycopg 3).
+psycopg[binary]
