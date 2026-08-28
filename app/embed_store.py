@@ -1,39 +1,26 @@
 """
 PaperMind — RAG Steps 2 & 3: EMBED and STORE.
 
-Reuses the load + split from ingest.py, turns each chunk into a vector using
-Ollama's `nomic-embed-text` model, and stores those vectors in Postgres/pgvector.
-
-Prerequisites (both must be running):
-- The database container:   docker compose up -d
-- Ollama with the model:    ollama pull nomic-embed-text
-
-Run it from the project root (venv active):
-    python -m app.embed_store
+Provides:
+- main(): (re)build the whole store from every PDF in data/  ->  python -m app.embed_store
+- ingest_pdf_file(path): add ONE new PDF to the store (used by the /upload endpoint)
+- get_vector_store(): connect to the pgvector collection
 """
+
+from pathlib import Path
 
 from langchain_ollama import OllamaEmbeddings
 from langchain_postgres import PGVector
+from langchain_community.document_loaders import PyPDFLoader
 
 from app.ingest import load_documents, split_documents
 
-# How to reach the database defined in docker-compose.yml.
-# Shape: postgresql+psycopg://<user>:<password>@<host>:<port>/<database>
 CONNECTION = "postgresql+psycopg://papermind:papermind@localhost:5432/papermind"
-
-# The name of the collection (think: table) that holds our paper vectors.
 COLLECTION = "papermind_papers"
 
 
 def sanitize(chunks):
-    """
-    Clean the chunk text before it goes into the database.
-
-    Some PDFs, when their text is extracted, contain NUL (0x00) bytes -- invisible
-    junk characters. PostgreSQL text columns refuse to store them, so we strip them
-    out of both the text and any string metadata. This is a very common real-world
-    data-cleaning step.
-    """
+    """Strip NUL (0x00) bytes that PostgreSQL text columns reject (common in PDF text)."""
     for chunk in chunks:
         chunk.page_content = chunk.page_content.replace("\x00", "")
         chunk.metadata = {
@@ -43,36 +30,41 @@ def sanitize(chunks):
     return chunks
 
 
-def main():
-    # 1) Prepare the chunks (the Load + Split from the previous step).
-    print("Loading and splitting PDFs...")
-    docs = load_documents()
-    chunks = split_documents(docs)
-    chunks = sanitize(chunks)  # <-- clean out forbidden characters
-    print(f"Prepared {len(chunks)} chunks.")
-
-    # 2) The embedding model -- runs locally through Ollama.
+def get_vector_store(pre_delete=False):
+    """Connect to the pgvector collection. pre_delete=True wipes it first (full rebuild)."""
     embeddings = OllamaEmbeddings(model="nomic-embed-text")
-
-    # 3) Connect to pgvector. pre_delete_collection=True means "start fresh each run"
-    #    so re-running doesn't pile up duplicate copies.
-    vector_store = PGVector(
+    return PGVector(
         embeddings=embeddings,
         collection_name=COLLECTION,
         connection=CONNECTION,
         use_jsonb=True,
-        pre_delete_collection=True,
+        pre_delete_collection=pre_delete,
     )
 
-    # 4) Embed and store, in batches, printing progress as we go.
-    print("Embedding + storing chunks (this can take a few minutes on first run)...")
+
+def ingest_pdf_file(path):
+    """Load ONE PDF, split + clean it, and add it to the store WITHOUT wiping existing data."""
+    docs = PyPDFLoader(str(path)).load()
+    chunks = sanitize(split_documents(docs))
+    store = get_vector_store(pre_delete=False)
+    store.add_documents(chunks)
+    return len(chunks)
+
+
+def main():
+    print("Loading and splitting PDFs...")
+    docs = load_documents()
+    chunks = sanitize(split_documents(docs))
+    print(f"Prepared {len(chunks)} chunks.")
+
+    store = get_vector_store(pre_delete=True)  # full rebuild
+
+    print("Embedding + storing chunks (this can take a few minutes)...")
     batch_size = 100
     total = len(chunks)
     for start in range(0, total, batch_size):
-        batch = chunks[start:start + batch_size]
-        vector_store.add_documents(batch)
-        done = min(start + batch_size, total)
-        print(f"  stored {done}/{total} chunks")
+        store.add_documents(chunks[start:start + batch_size])
+        print(f"  stored {min(start + batch_size, total)}/{total} chunks")
 
     print(f"Done! Stored {total} chunks in the '{COLLECTION}' collection.")
 
