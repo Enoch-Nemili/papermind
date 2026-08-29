@@ -25,3 +25,9 @@ psycopg[binary]
 # --- Web frontend: file uploads ---
 # Lets FastAPI accept uploaded files (multipart/form-data).
 python-multipart
+
+# --- Cloud deployment: hosted model + config ---
+# Google Gemini models (chat + embeddings) for the cloud version.
+langchain-google-genai
+# Loads a local .env file so secrets stay out of the code.
+python-dotenv

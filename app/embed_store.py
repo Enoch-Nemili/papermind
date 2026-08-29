@@ -1,22 +1,16 @@
 """
-PaperMind — RAG Steps 2 & 3: EMBED and STORE.
+PaperMind — EMBED and STORE.
 
-Provides:
-- main(): (re)build the whole store from every PDF in data/  ->  python -m app.embed_store
-- ingest_pdf_file(path): add ONE new PDF to the store (used by the /upload endpoint)
-- get_vector_store(): connect to the pgvector collection
+- main(): rebuild the whole store from every PDF in data/  ->  python -m app.embed_store
+- ingest_pdf_file(path): add ONE new PDF (used by /upload)
+- get_vector_store(): connect to the pgvector collection (models + DB come from config)
 """
 
-from pathlib import Path
-
-from langchain_ollama import OllamaEmbeddings
 from langchain_postgres import PGVector
 from langchain_community.document_loaders import PyPDFLoader
 
 from app.ingest import load_documents, split_documents
-
-CONNECTION = "postgresql+psycopg://papermind:papermind@localhost:5432/papermind"
-COLLECTION = "papermind_papers"
+from app.config import get_embeddings, get_connection, COLLECTION
 
 
 def sanitize(chunks):
@@ -32,11 +26,10 @@ def sanitize(chunks):
 
 def get_vector_store(pre_delete=False):
     """Connect to the pgvector collection. pre_delete=True wipes it first (full rebuild)."""
-    embeddings = OllamaEmbeddings(model="nomic-embed-text")
     return PGVector(
-        embeddings=embeddings,
+        embeddings=get_embeddings(),
         collection_name=COLLECTION,
-        connection=CONNECTION,
+        connection=get_connection(),
         use_jsonb=True,
         pre_delete_collection=pre_delete,
     )
