@@ -52,7 +52,7 @@ def main():
 
     store = get_vector_store(pre_delete=True)  # full rebuild
 
-    print("Embedding + storing chunks (this can take a few minutes)...")
+    print("Embedding + storing chunks (local model, no rate limits)...")
     batch_size = 100
     total = len(chunks)
     for start in range(0, total, batch_size):

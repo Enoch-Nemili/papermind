@@ -31,3 +31,6 @@ python-multipart
 langchain-google-genai
 # Loads a local .env file so secrets stay out of the code.
 python-dotenv
+
+# --- Local embeddings (no API rate limits, runs anywhere) ---
+fastembed
