@@ -6,11 +6,11 @@ PaperMind — EMBED and STORE.
 - get_vector_store(): connect to the pgvector collection (models + DB come from config)
 """
 
-from langchain_community.document_loaders import PyPDFLoader
 from langchain_postgres import PGVector
 
 from app.config import COLLECTION, get_connection, get_embeddings
 from app.ingest import load_documents, split_documents
+from app.pdf_loader import load_pdf
 
 
 def sanitize(chunks):
@@ -37,7 +37,7 @@ def get_vector_store(pre_delete=False):
 
 def ingest_pdf_file(path):
     """Load ONE PDF, split + clean it, and add it to the store WITHOUT wiping existing data."""
-    docs = PyPDFLoader(str(path)).load()
+    docs = load_pdf(path)
     chunks = sanitize(split_documents(docs))
     store = get_vector_store(pre_delete=False)
     store.add_documents(chunks)

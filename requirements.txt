@@ -7,8 +7,6 @@ uvicorn[standard]
 # --- RAG: loading & splitting documents ---
 # LangChain: the toolkit that glues the RAG steps together.
 langchain
-# Community loaders (includes the PDF loader we use).
-langchain-community
 # The text splitters (chunking).
 langchain-text-splitters
 # Reads text out of PDF files.
