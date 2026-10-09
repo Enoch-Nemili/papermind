@@ -11,8 +11,9 @@ Run it from the project root (with your venv active):
 
 from pathlib import Path
 
-from langchain_community.document_loaders import PyPDFDirectoryLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+
+from app.pdf_loader import load_pdf_folder
 
 # Build the path to our data/ folder no matter where the script is run from.
 # __file__ = this file's location; .parent.parent walks up from app/ to the project root.
@@ -21,9 +22,7 @@ DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 
 def load_documents():
     """Open every PDF in data/ and return a list of documents (one per page)."""
-    loader = PyPDFDirectoryLoader(str(DATA_DIR))
-    documents = loader.load()
-    return documents
+    return load_pdf_folder(DATA_DIR)
 
 
 def split_documents(documents):
