@@ -1,3 +1,6 @@
+# Everything: the MCP server (requirements-mcp.txt) plus the web app and cloud providers.
+-r requirements-mcp.txt
+
 # --- Web API ---
 # The web framework that turns our Python code into an API.
 fastapi
@@ -33,6 +36,5 @@ python-dotenv
 # --- Local embeddings (no API rate limits, runs anywhere) ---
 fastembed
 
-# --- MCP server: expose PaperMind as tools for AI assistants ---
-# Official Model Context Protocol SDK, pinned to the v2 line (v2 renamed FastMCP -> MCPServer).
+# --- MCP developer tools (`mcp dev`, Inspector integration) ---
 mcp[cli]>=2,<3
