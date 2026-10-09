@@ -44,7 +44,7 @@ def get_embeddings():
     if EMBED_PROVIDER == "ollama":
         from langchain_ollama import OllamaEmbeddings
         return OllamaEmbeddings(model="nomic-embed-text")
-    from langchain_community.embeddings import FastEmbedEmbeddings
+    from app.embeddings import FastEmbedEmbeddings
     return FastEmbedEmbeddings(model_name=FASTEMBED_MODEL)
 
 
