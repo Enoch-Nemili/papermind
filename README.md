@@ -9,19 +9,15 @@
 ![Docker](https://img.shields.io/badge/Docker-non--root-2496ED)
 ![License](https://img.shields.io/badge/License-MIT-yellow)
 
-<!-- Demo GIF goes here: ![PaperMind in Claude Desktop](docs/demo.gif) -->
+![PaperMind answering in Claude Desktop with page citations](docs/demo.gif)
 
 ## Highlights
 
 - **MCP server with all three primitives.** 3 tools, 2 resources and 1 prompt. Typed Pydantic outputs, so every tool publishes an output schema. Tool annotations mark which tools are read-only.
-- **Grounded answers with citations.** In Claude Desktop, asking *"How does vLLM manage KV-cache memory?"* leads Claude to call `search_papers` and answer with page citations from the vLLM paper.
-- **Security enforced in code, not in the prompt.** `add_paper` can only read from `inbox/`. Path traversal and symlink escapes are blocked, files must pass a PDF signature check, and failed indexing is rolled back.
-- **Tested and measured.**
-  - 29 unit, protocol and API tests run in CI on Python 3.12 and 3.14.
-  - A retrieval eval against the live vector store passes 6/6, and documents one known weakness (see [Evals](#evals)).
-- **Runs two ways.**
-  - Over stdio for desktop clients.
-  - Over Streamable HTTP inside a non-root Docker image, with the embedding model built into the image.
+- **Hybrid retrieval, tuned by measurement.** Semantic search (pgvector) plus Postgres full-text search, fused with Reciprocal Rank Fusion. The fusion weight was chosen on a 36-question labeled eval with a decision rule fixed before the run: **78% hit@1, 97% recall@5, 0.841 MRR** (see [Evals](#evals)).
+- **Security enforced in code, not in the prompt.** `add_paper` can only read from `inbox/`; path traversal, symlink escapes and fake PDFs are refused. HTTP mode requires a bearer token and refuses to start on a network address without one.
+- **Tested.** 59 unit, protocol and HTTP tests plus live retrieval evals. CI runs lint and tests on Python 3.12 and 3.14, builds the Docker image, and checks that the container rejects unauthenticated requests.
+- **Runs two ways.** Over stdio for desktop clients, or over Streamable HTTP in a multi-stage, non-root Docker image (836 MB, down from 978 MB) with the embedding model built in.
 
 ## Architecture
 
@@ -31,11 +27,14 @@ flowchart LR
         CD["Claude Desktop<br/>/ any MCP client"]
         B["Browser"]
     end
-    CD -- "stdio or<br/>Streamable HTTP" --> M["MCP server<br/>app/mcp_server.py<br/>tools · resources · prompt"]
+    CD -- "stdio, or Streamable HTTP<br/>+ bearer token" --> M["MCP server<br/>app/mcp_server.py<br/>tools · resources · prompt"]
     B --> F["FastAPI app<br/>app/main.py"]
-    M --> R["Retrieval<br/>fastembed (bge-small-en-v1.5)"]
-    F --> R
-    R --> V[("PostgreSQL + pgvector<br/>local Docker or Neon")]
+    M --> H["Hybrid search<br/>app/hybrid_search.py"]
+    F --> H
+    H --> S["Semantic<br/>fastembed bge-small"]
+    H --> K["Keyword<br/>Postgres full-text (GIN)"]
+    S --> V[("PostgreSQL + pgvector<br/>local Docker or Neon")]
+    K --> V
     I["inbox/ PDFs"] -- "add_paper:<br/>validate → copy → chunk → embed" --> V
 ```
 
@@ -45,7 +44,7 @@ The MCP client's own model does the reasoning. PaperMind's job is **retrieval yo
 
 | Kind | Name | What it does |
 |------|------|--------------|
-| Tool | `search_papers(query, k=1..10)` | Semantic search; returns passages with `source`, `page`, `relevance`, `text`. Read-only |
+| Tool | `search_papers(query, k=1..10)` | Hybrid search; returns passages with `source`, `page`, `relevance`, `text`. Read-only |
 | Tool | `list_papers()` | Lists the PDFs in the library. Read-only |
 | Tool | `add_paper(filename)` | Indexes a PDF from `inbox/`. Idempotent and non-destructive |
 | Resource | `papermind://library` | JSON catalog: title, page count, size for each paper |
@@ -78,14 +77,42 @@ npx @modelcontextprotocol/inspector .venv/bin/python app/mcp_server.py
 ### Serve it over HTTP (Docker)
 
 ```bash
+echo "PAPERMIND_TOKEN=$(python -c 'import secrets; print(secrets.token_urlsafe(32))')" >> .env
 docker build -t papermind-mcp .
 docker run --rm --env-file .env -p 127.0.0.1:8765:8765 \
   -v "$PWD/data:/app/data" -v "$PWD/inbox:/app/inbox" papermind-mcp
 
-python scripts/smoke_http.py      # connects to http://127.0.0.1:8765/mcp
+python scripts/smoke_http.py      # sends the token from .env
 ```
 
-Without Docker: `python app/mcp_server.py --http` (defaults to `127.0.0.1:8765`).
+Clients authenticate with `Authorization: Bearer <PAPERMIND_TOKEN>`. Without Docker, `python app/mcp_server.py --http` serves on `127.0.0.1:8765`; it won't bind to a network address unless a token is set.
+
+## Search: how it works and how it was tuned
+
+`search_papers` runs two searches over the same chunks and merges them:
+
+1. **Semantic**: the query is embedded (bge-small-en-v1.5) and matched against pgvector by cosine similarity. Finds passages with the same *meaning*.
+2. **Keyword**: Postgres full-text search over a generated `tsvector` column with a GIN index. Finds passages with the same *words*. Queries are reduced to alphanumeric OR-terms, so user input can't inject query operators.
+3. **Reciprocal Rank Fusion**: each list votes `weight / (60 + rank)` per chunk; chunks ranked well by both win. Ranks are fused rather than raw scores, which aren't on comparable scales. If full-text search is unavailable, search falls back to semantic-only instead of failing.
+
+### Evals
+
+`scripts/eval_retrieval.py` runs labeled questions ([`evals/`](evals/)) through every method and reports hit@1 (was the #1 result from the right paper?), recall@5 and MRR. Full output: [`evals/results.md`](evals/results.md).
+
+| Method (36 questions) | hit@1 | recall@5 | MRR |
+|---|---|---|---|
+| Semantic only | 78% | 94% | 0.838 |
+| Keyword only | 67% | 81% | 0.728 |
+| Hybrid, equal weights | 75% | 94% | 0.826 |
+| **Hybrid, keyword weight 0.5 (default)** | **78%** | **97%** | **0.841** |
+
+What the numbers showed:
+
+- **Equal-weight fusion was slightly worse than semantic alone**, so keyword search is a light tiebreaker (weight 0.5), not an equal partner. The weight was picked by a rule fixed before the run (best MRR; within 0.02, higher recall@5 wins), not by trying values until a test passed.
+- **The embedding model handles exact terms well on its own**: 10/10 on queries like "PagedAttention" or "RAG-Sequence versus RAG-Token".
+- **Most remaining misses are long-document bias**: T5 (67 pages, covers nearly every topic) wins many plain-English questions under any weight. Tracked in [#9](https://github.com/Enoch-Nemili/papermind/issues/9).
+
+`python scripts/explain_search.py "<query>"` shows both rankings and the fused result for any query.
 
 ## Security
 
@@ -96,32 +123,28 @@ Without Docker: `python app/mcp_server.py --http` (defaults to `127.0.0.1:8765`)
 | Non-PDF or disguised files | Needs a `.pdf` extension, a size limit and the `%PDF-` file signature |
 | Partial writes | If indexing fails, the copied file is removed |
 | Excessive agency (OWASP LLM Top 10) | The model can only *read* the library and add files the user already put in `inbox/`. It has no delete and no arbitrary file access |
+| Unauthenticated network access | HTTP mode verifies a bearer token (constant-time compare, 32+ chars) through the SDK's resource-server auth; it refuses to bind a network address without one. CI checks the container returns 401 |
+| Query injection | Keyword queries are reduced to alphanumeric terms before reaching `to_tsquery`; all SQL is parameterized |
 | Container | Runs as a non-root user. Secrets come from `--env-file` at runtime and are never built into the image |
-| Network | HTTP binds to `127.0.0.1` by default. **There is no auth, so don't expose it publicly** without adding OAuth in front |
 
-Writing these tests also found a real path-traversal bug in the original web `/upload` endpoint. It's fixed, and a regression test now covers it.
+**Scope:** MCP authorization makes the server an OAuth resource server. A shared secret suits a self-hosted tool; full OAuth means swapping in a `TokenVerifier` that validates JWTs from an authorization server (Auth0, Keycloak). Nothing else changes.
+
+## Bugs found by testing
+
+- **Path traversal in the web `/upload` endpoint**: a crafted filename could write outside `data/`. Found while writing the security tests; fixed with a regression test.
+- **Dead connections after Neon auto-suspends**: a server idle for hours failed its next search with `AdminShutdown: terminating connection due to administrator command`, because the pool reused a connection the database had killed. Found in a long-running container's logs, reproduced by restarting Postgres between two queries, and fixed with `pool_pre_ping` + `pool_recycle` ([#13](https://github.com/Enoch-Nemili/papermind/issues/13)).
 
 ## Tests
 
 ```bash
 pip install -r requirements-dev.txt
-ruff check app tests
-pytest -v                      # 29 fast tests, no database needed
-pytest -m integration -v       # retrieval evals against the real vector store
+ruff check app tests scripts
+pytest -v                      # 59 fast tests, no database needed
+pytest -m integration -v       # retrieval checks against the real vector store
+python scripts/eval_retrieval.py
 ```
 
-The fast suite connects a real in-process MCP client to the server. The database and embedder are replaced with fakes, so it checks the protocol surface, the input validation and the security boundaries without needing any infrastructure.
-
-### Evals
-
-`tests/test_retrieval_quality.py` runs queries against the indexed library and checks that the expected paper ranks first.
-
-| Query style | Result |
-|-------------|--------|
-| Technical phrasing (vLLM paging, attention, LoRA, BERT, chain-of-thought, original RAG) | **6/6** expected paper ranked #1 |
-| Plain English ("How does self-attention work?") | Known miss, tracked as `xfail` |
-
-Technical phrasing scores around 0.87 relevance; plain English scores 0.65–0.69. This is a vocabulary-mismatch problem. For now, the tool description tells the model to search using the papers' own terminology. The planned fix is hybrid BM25 + vector search, after which this case should pass.
+The fast suite connects a real in-process MCP client to the server, and sends real HTTP requests through the SDK's auth middleware. The database and embedder are replaced with fakes, so it checks the protocol surface, input validation, fusion logic and security boundaries without needing any infrastructure.
 
 ## Web app
 
@@ -144,11 +167,12 @@ uvicorn app.main:app --reload              # http://localhost:8000
 
 ## Configuration
 
-| Variable | Default | Options |
+| Variable | Default | Purpose |
 |----------|---------|---------|
-| `EMBED_PROVIDER` | `fastembed` | `fastembed` · `gemini` · `ollama` |
-| `MODEL_PROVIDER` | `ollama` | `ollama` · `gemini` (only used by the web app's `/ask`) |
-| `DATABASE_URL`   | local Docker Postgres | any Postgres + pgvector URL (e.g. Neon) |
+| `DATABASE_URL`    | local Docker Postgres | any Postgres + pgvector URL (e.g. Neon) |
+| `EMBED_PROVIDER`  | `fastembed` | `fastembed` · `gemini` · `ollama` |
+| `MODEL_PROVIDER`  | `ollama` | `ollama` · `gemini` (only used by the web app's `/ask`) |
+| `PAPERMIND_TOKEN` | unset | bearer token for HTTP mode; required beyond localhost |
 
 Secrets live only in a git-ignored `.env`. The committed `.env.example` documents every setting.
 
@@ -156,27 +180,35 @@ Secrets live only in a git-ignored `.env`. The committed `.env.example` document
 
 ```
 app/
-├── mcp_server.py   # MCP server: tools, resources, prompt; stdio + HTTP
-├── main.py         # FastAPI web app
-├── embed_store.py  # embeddings + pgvector storage, PDF ingestion
-├── ingest.py       # PDF loading + chunking
-├── rag.py          # retrieve → grounded answer (web app)
-└── config.py       # provider/DB selection from env vars
-tests/              # MCP protocol, security, API and retrieval-eval tests
-scripts/            # HTTP smoke test
-Dockerfile          # non-root MCP server image
-.github/workflows/  # CI: ruff + pytest on Python 3.12 and 3.14
+├── mcp_server.py      # MCP server: tools, resources, prompt; stdio + HTTP
+├── hybrid_search.py   # semantic + keyword search fused with RRF
+├── keyword_search.py  # Postgres full-text search (tsvector + GIN)
+├── auth.py            # bearer-token verifier for HTTP mode
+├── retrieval_metrics.py
+├── embed_store.py     # pgvector storage, ingestion, connection pooling
+├── pdf_loader.py      # PDF -> per-page documents with citation metadata
+├── embeddings.py      # fastembed adapter
+├── ingest.py          # chunking
+├── main.py, rag.py    # FastAPI web app
+└── config.py          # provider/DB selection from env vars
+evals/                 # labeled questions + latest results
+scripts/               # eval, search explainer, HTTP smoke test
+tests/                 # protocol, security, auth, fusion, metrics, API tests
+Dockerfile             # multi-stage, non-root MCP server image
+.github/workflows/     # CI: lint + tests (3.12, 3.14) + Docker build and auth checks
 ```
 
 ## Roadmap
 
 - [x] End-to-end RAG with citations, plus a web UI
 - [x] MCP server: tools, resources, prompt, typed outputs, annotations
-- [x] Security boundary + 29-test suite + retrieval evals in CI
-- [x] Streamable HTTP transport + Docker image
-- [ ] Hybrid BM25 + vector retrieval (fixes the plain-English eval)
-- [ ] OAuth for remote HTTP deployments
-- [ ] Migrate off deprecated `langchain-community` loaders
+- [x] Security boundary, tests and CI
+- [x] Streamable HTTP transport + multi-stage Docker image
+- [x] Hybrid retrieval with a labeled eval set and measured tuning
+- [x] Bearer-token auth for HTTP mode
+- [x] Off deprecated `langchain-community` (verified identical text and vectors)
+- [ ] Long-document bias: per-paper diversity or length normalization ([#9](https://github.com/Enoch-Nemili/papermind/issues/9))
+- [ ] Full OAuth via a JWT `TokenVerifier`
 
 ## Contact
 
