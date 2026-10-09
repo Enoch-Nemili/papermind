@@ -1,0 +1,26 @@
+{"q": "How does self-attention work?", "paper": "attention-is-all-you-need.pdf"}
+{"q": "How can a model translate sentences without using a recurrent network?", "paper": "attention-is-all-you-need.pdf"}
+{"q": "How do you pre-train a model by hiding some words and making it guess them?", "paper": "bert.pdf"}
+{"q": "Why is reading text in both directions better for understanding language?", "paper": "bert.pdf"}
+{"q": "Does asking a model to show its reasoning step by step make it better at math word problems?", "paper": "chain-of-thought.pdf"}
+{"q": "Why do big models solve arithmetic puzzles better when the prompt includes worked examples?", "paper": "chain-of-thought.pdf"}
+{"q": "How can a search system find answer passages using learned vectors instead of keyword matching?", "paper": "dense-passage-retrieval.pdf"}
+{"q": "Can learned embeddings beat classic keyword search at finding Wikipedia passages that answer a question?", "paper": "dense-passage-retrieval.pdf"}
+{"q": "Can a huge language model do a new task just from a few examples in the prompt, without retraining?", "paper": "gpt3-few-shot-learners.pdf"}
+{"q": "How well does a 175 billion parameter model do with zero, one or a few examples?", "paper": "gpt3-few-shot-learners.pdf"}
+{"q": "Can a smaller open model trained on more data match much bigger models?", "paper": "llama.pdf"}
+{"q": "What publicly available data was used to train an open foundation model?", "paper": "llama.pdf"}
+{"q": "How can I fine-tune a giant model cheaply without updating all of its weights?", "paper": "lora.pdf"}
+{"q": "Why can the changes made during fine-tuning be captured by small matrices?", "paper": "lora.pdf"}
+{"q": "How can a language model look up documents before it answers a question?", "paper": "rag-original.pdf"}
+{"q": "Can giving a text generator access to retrieved documents reduce made-up answers?", "paper": "rag-original.pdf"}
+{"q": "How do you make sentence embeddings that are fast to compare for similarity?", "paper": "sentence-bert.pdf"}
+{"q": "Why is comparing every pair of sentences with BERT too slow for finding similar sentences?", "paper": "sentence-bert.pdf"}
+{"q": "What happens if you treat every language task as turning one piece of text into another?", "paper": "t5.pdf"}
+{"q": "What is the Colossal Clean Crawled Corpus?", "paper": "t5.pdf"}
+{"q": "Why do LLM servers waste so much GPU memory when handling many requests?", "paper": "vllm-pagedattention.pdf"}
+{"q": "How can an LLM server handle more users at the same time on the same GPU?", "paper": "vllm-pagedattention.pdf"}
+{"q": "How can transformers spot unusual behavior in power grid data?", "paper": "transformer-anomaly-detection.pdf"}
+{"q": "Can attention-based models detect faults or attacks in electrical systems?", "paper": "transformer-anomaly-detection.pdf"}
+{"q": "How can edge devices change how much computing they use based on what a camera sees?", "paper": "acsos-vision-semantic-cps.pdf"}
+{"q": "What is semantic resource elasticity?", "paper": "acsos-vision-semantic-cps.pdf"}

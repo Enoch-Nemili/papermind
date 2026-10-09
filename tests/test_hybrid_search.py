@@ -36,6 +36,14 @@ def test_ties_keep_semantic_order():
     assert keys(fused) == ["s1", "k1", "s2", "k2"]
 
 
+def test_weights_shift_the_balance():
+    semantic, keyword = ["s"], ["k"]
+    assert keys(rrf_fuse([semantic, keyword]))[0] == "s"  # equal weights: tie, semantic first
+    assert keys(rrf_fuse([semantic, keyword], weights=[1.0, 2.0]))[0] == "k"
+    top = rrf_fuse([["x"], ["x"]], weights=[1.0, 3.0])[0]
+    assert top == ("x", pytest.approx(1.0))  # still normalized to 0-1
+
+
 def test_nothing_in_nothing_out():
     assert rrf_fuse([[], []]) == []
 
