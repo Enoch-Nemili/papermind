@@ -37,6 +37,7 @@ from mcp.types import ToolAnnotations
 from pypdf import PdfReader
 
 from app.embed_store import get_vector_store, ingest_pdf_file
+from app.hybrid_search import hybrid_search
 
 # IMPORTANT: over stdio, stdout IS the protocol channel between client and server.
 # A stray print() corrupts the conversation, so every log line goes to stderr.
@@ -60,7 +61,7 @@ READ_ONLY = ToolAnnotations(read_only_hint=True, open_world_hint=False)
 class Passage(BaseModel):
     source: str = Field(description="PDF file the passage came from.")
     page: str = Field(description="Page number as a reader would see it.")
-    relevance: float = Field(description="0 to 1; higher is more relevant.")
+    relevance: float = Field(description="0 to 1; 1.0 = ranked first by both keyword and semantic search.")
     text: str = Field(description="The passage itself.")
 
 
@@ -113,7 +114,7 @@ def file_inside(folder: Path, filename: str) -> Path:
 
 @mcp.tool(title="Search papers", annotations=READ_ONLY)
 def search_papers(
-    query: Annotated[str, Field(description="What to look for. Use the technical terms the papers themselves would use.")],
+    query: Annotated[str, Field(description="What to look for: a plain question or the technical terms the papers use.")],
     k: Annotated[int, Field(ge=1, le=MAX_K, description="How many passages to return (1-10).")] = 5,
 ) -> list[Passage]:
     """Search the user's research-paper library for passages relevant to `query`.
@@ -122,22 +123,20 @@ def search_papers(
     a relevance score from 0 to 1, and the passage text. Answer using these passages
     and cite source + page.
 
-    Retrieval is semantic, and it works best with the papers' own vocabulary: search
-    "scaled dot-product attention queries keys values", not "how does attention work".
-    If results look weak, rephrase and search again. If nothing relevant comes back,
-    say the library doesn't cover it.
+    Search is hybrid: keyword matching plus semantic similarity, so both plain-English
+    questions and the papers' technical terms work. If results look weak, rephrase and
+    search again. If nothing relevant comes back, say the library doesn't cover it.
     """
     log.info("search_papers query=%r k=%d", query, k)
-    results = get_store().similarity_search_with_score(query, k=k)
+    results = hybrid_search(get_store(), query, k=k)
     return [
         Passage(
             source=Path(doc.metadata.get("source", "unknown")).name,
             page=human_page(doc.metadata),
-            # pgvector returns cosine DISTANCE (0 = identical); flip it to a 0-1 relevance
-            relevance=round(1 - float(distance), 3),
+            relevance=round(score, 3),
             text=doc.page_content,
         )
-        for doc, distance in results
+        for doc, score in results
     ]
 
 
