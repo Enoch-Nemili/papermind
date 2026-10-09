@@ -1,0 +1,6 @@
+# Everything needed to run the app, plus the test and lint tools.
+-r requirements.txt
+pytest
+ruff
+# FastAPI's TestClient needs httpx
+httpx

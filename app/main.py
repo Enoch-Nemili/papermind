@@ -11,13 +11,14 @@ Endpoints:
 
 import os
 from pathlib import Path
+from typing import Annotated
 
-from fastapi import FastAPI, UploadFile, File
+from fastapi import FastAPI, File, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
-from app.rag import answer_question
 from app.embed_store import ingest_pdf_file
+from app.rag import answer_question
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 FRONTEND = Path(__file__).resolve().parent.parent / "frontend" / "index.html"
@@ -70,18 +71,26 @@ def ask(request: AskRequest):
 
 
 @app.post("/upload")
-async def upload(file: UploadFile = File(...)):
+async def upload(file: Annotated[UploadFile, File()]):
     """Accept a PDF, save it to data/, and ingest it into the vector store."""
-    if not file.filename.lower().endswith(".pdf"):
+    # Never trust a client-supplied filename: keep only its final component, so a
+    # name like "../../app/main.py" can't write outside data/ (path traversal).
+    name = Path(file.filename or "").name
+    if not name.lower().endswith(".pdf"):
         return {"ok": False, "error": "Only PDF files are supported."}
 
+    content = await file.read()
+    if not content.startswith(b"%PDF-"):  # check the real file signature, not just the extension
+        return {"ok": False, "error": "That file isn't a valid PDF."}
+
     DATA_DIR.mkdir(exist_ok=True)
-    dest = DATA_DIR / file.filename
-    dest.write_bytes(await file.read())
+    dest = DATA_DIR / name
+    dest.write_bytes(content)
 
     try:
         n_chunks = ingest_pdf_file(dest)
-    except Exception as exc:  # keep the server alive and report the problem
+    except Exception as exc:  # noqa: BLE001 - API boundary: report the problem, keep serving
+        dest.unlink(missing_ok=True)  # don't leave an unindexed file in the library
         return {"ok": False, "error": f"Failed to process PDF: {exc}"}
 
-    return {"ok": True, "filename": file.filename, "chunks_added": n_chunks}
+    return {"ok": True, "filename": name, "chunks_added": n_chunks}
