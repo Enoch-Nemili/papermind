@@ -12,22 +12,38 @@ jobs:
       fail-fast: false
       matrix:
         python-version: ["3.12", "3.14"]
-
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
           cache-dependency-path: requirements*.txt
-
       - name: Install dependencies
         run: pip install -r requirements-dev.txt
-
       - name: Lint
-        run: ruff check app tests
-
+        run: ruff check app tests scripts
       - name: Test
         # Integration tests (real vector DB) are skipped here; they need secrets.
         run: pytest -v
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: docker build -t papermind-mcp .
+      - name: Refuses to serve on the network without a token
+        run: |
+          if docker run --rm papermind-mcp; then
+            echo "server started without auth"; exit 1
+          fi
+      - name: Rejects unauthenticated requests
+        run: |
+          docker run -d --name pm -p 127.0.0.1:8765:8765 \
+            -e PAPERMIND_TOKEN="$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')" papermind-mcp
+          sleep 6
+          code=$(curl -s -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:8765/mcp \
+            -H 'Content-Type: application/json' -d '{}')
+          echo "unauthenticated request -> HTTP $code"
+          test "$code" = "401"
