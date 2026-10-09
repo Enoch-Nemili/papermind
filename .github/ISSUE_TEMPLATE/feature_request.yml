@@ -1,0 +1,19 @@
+name: Feature request
+description: Suggest an improvement
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would this solve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+  - type: textarea
+    id: measure
+    attributes:
+      label: How would we know it worked?
+      description: For retrieval changes, which eval metric should move (hit@1, recall@5, MRR)?
