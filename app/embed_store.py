@@ -24,12 +24,21 @@ def sanitize(chunks):
     return chunks
 
 
+# Long-running servers keep pooled connections open for hours, but serverless Postgres
+# (Neon) suspends after a few idle minutes and kills them ("AdminShutdown: terminating
+# connection due to administrator command"). pool_pre_ping tests each connection with a
+# cheap SELECT 1 before reuse and silently reconnects if it's dead; pool_recycle retires
+# connections older than 5 minutes before the server can kill them.
+ENGINE_ARGS = {"pool_pre_ping": True, "pool_recycle": 300}
+
+
 def get_vector_store(pre_delete=False):
     """Connect to the pgvector collection. pre_delete=True wipes it first (full rebuild)."""
     return PGVector(
         embeddings=get_embeddings(),
         collection_name=COLLECTION,
         connection=get_connection(),
+        engine_args=ENGINE_ARGS,
         use_jsonb=True,
         pre_delete_collection=pre_delete,
     )
