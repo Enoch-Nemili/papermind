@@ -21,3 +21,7 @@ data/
 
 # PDFs waiting to be added via the MCP add_paper tool
 inbox/
+
+# Test and lint caches
+.pytest_cache/
+.ruff_cache/

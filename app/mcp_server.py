@@ -22,7 +22,7 @@ import sys
 from pathlib import Path
 from typing import Annotated
 
-from pydantic import Field
+from pydantic import BaseModel, Field
 
 # AI clients launch this file from an arbitrary working directory, so make the
 # project root importable ourselves instead of relying on `python -m`.
@@ -51,6 +51,27 @@ MAX_K = 10                  # cap results so one call can't flood the client's c
 MAX_PDF_MB = 50
 
 READ_ONLY = ToolAnnotations(read_only_hint=True, open_world_hint=False)
+
+
+# Typed results: the SDK turns these into each tool's output schema, so clients get
+# structured, predictable data instead of a blob of JSON text.
+class Passage(BaseModel):
+    source: str = Field(description="PDF file the passage came from.")
+    page: str = Field(description="Page number as a reader would see it.")
+    relevance: float = Field(description="0 to 1; higher is more relevant.")
+    text: str = Field(description="The passage itself.")
+
+
+class LibraryListing(BaseModel):
+    count: int
+    papers: list[str]
+
+
+class AddPaperResult(BaseModel):
+    added: bool
+    paper: str
+    chunks_indexed: int | None = None
+    reason: str | None = None
 
 mcp = MCPServer("PaperMind")
 
@@ -92,7 +113,7 @@ def file_inside(folder: Path, filename: str) -> Path:
 def search_papers(
     query: Annotated[str, Field(description="What to look for. Use the technical terms the papers themselves would use.")],
     k: Annotated[int, Field(ge=1, le=MAX_K, description="How many passages to return (1-10).")] = 5,
-) -> list[dict]:
+) -> list[Passage]:
     """Search the user's research-paper library for passages relevant to `query`.
 
     Returns passages most-relevant first, each with the source file, page number,
@@ -107,22 +128,22 @@ def search_papers(
     log.info("search_papers query=%r k=%d", query, k)
     results = get_store().similarity_search_with_score(query, k=k)
     return [
-        {
-            "source": Path(doc.metadata.get("source", "unknown")).name,
-            "page": human_page(doc.metadata),
+        Passage(
+            source=Path(doc.metadata.get("source", "unknown")).name,
+            page=human_page(doc.metadata),
             # pgvector returns cosine DISTANCE (0 = identical); flip it to a 0-1 relevance
-            "relevance": round(1 - float(distance), 3),
-            "text": doc.page_content,
-        }
+            relevance=round(1 - float(distance), 3),
+            text=doc.page_content,
+        )
         for doc, distance in results
     ]
 
 
 @mcp.tool(title="List papers", annotations=READ_ONLY)
-def list_papers() -> dict:
+def list_papers() -> LibraryListing:
     """List the PDF papers currently in the user's library."""
     names = sorted(p.name for p in DATA_DIR.glob("*.pdf"))
-    return {"count": len(names), "papers": names}
+    return LibraryListing(count=len(names), papers=names)
 
 
 @mcp.tool(
@@ -136,7 +157,7 @@ def list_papers() -> dict:
 )
 def add_paper(
     filename: Annotated[str, Field(description="Name of a PDF the user put in PaperMind's inbox/ folder, e.g. 'mamba.pdf'.")],
-) -> dict:
+) -> AddPaperResult:
     """Add a PDF from PaperMind's inbox/ folder to the searchable library.
 
     Only files the user has placed in inbox/ can be added; this tool cannot read
@@ -159,7 +180,7 @@ def add_paper(
 
     dest = DATA_DIR / src.name
     if dest.exists():
-        return {"added": False, "paper": src.name, "reason": "already in the library"}
+        return AddPaperResult(added=False, paper=src.name, reason="already in the library")
 
     shutil.copy2(src, dest)
     try:
@@ -170,7 +191,7 @@ def add_paper(
         raise ToolError(f"Couldn't index {src.name}: {exc}") from exc
 
     log.info("add_paper added %s (%d chunks)", src.name, chunks)
-    return {"added": True, "paper": src.name, "chunks_indexed": chunks}
+    return AddPaperResult(added=True, paper=src.name, chunks_indexed=chunks)
 
 
 # ------------------------------------------------------------- RESOURCES ---
