@@ -19,6 +19,7 @@ Run it two ways:
 
 import json
 import logging
+import os
 import shutil
 import sys
 from pathlib import Path
@@ -36,6 +37,7 @@ from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import ToolAnnotations
 from pypdf import PdfReader
 
+from app.auth import auth_options
 from app.embed_store import get_vector_store, ingest_pdf_file
 from app.hybrid_search import hybrid_search
 
@@ -52,6 +54,7 @@ DATA_DIR = ROOT / "data"    # the library: every PDF here is indexed
 INBOX_DIR = ROOT / "inbox"  # the ONLY folder add_paper is allowed to read from
 MAX_K = 10                  # cap results so one call can't flood the client's context
 MAX_PDF_MB = 50
+LOOPBACK = {"127.0.0.1", "localhost", "::1"}
 
 READ_ONLY = ToolAnnotations(read_only_hint=True, open_world_hint=False)
 
@@ -76,7 +79,8 @@ class AddPaperResult(BaseModel):
     chunks_indexed: int | None = None
     reason: str | None = None
 
-mcp = MCPServer("PaperMind")
+# HTTP mode requires a bearer token when PAPERMIND_TOKEN is set (see app/auth.py).
+mcp = MCPServer("PaperMind", **auth_options(os.getenv("PAPERMIND_TOKEN")))
 
 _store = None
 
@@ -252,8 +256,16 @@ def main():
     parser.add_argument("--port", type=int, default=8765)
     args = parser.parse_args()
 
+    # Secure by default: anything reachable beyond this machine must require a token.
+    if args.http and args.host not in LOOPBACK and not os.getenv("PAPERMIND_TOKEN"):
+        parser.error(
+            f"refusing to serve on {args.host} without auth. Set PAPERMIND_TOKEN "
+            "(e.g. in .env) or bind to 127.0.0.1."
+        )
+
     if args.http:
-        log.info("serving MCP over HTTP at http://%s:%d/mcp", args.host, args.port)
+        auth = "bearer token required" if os.getenv("PAPERMIND_TOKEN") else "NO AUTH (localhost only)"
+        log.info("serving MCP over HTTP at http://%s:%d/mcp (%s)", args.host, args.port, auth)
         mcp.run(transport="streamable-http", host=args.host, port=args.port)
     else:
         mcp.run(transport="stdio")
