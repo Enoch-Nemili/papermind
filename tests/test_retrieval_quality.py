@@ -55,10 +55,9 @@ def test_hybrid_ranks_the_right_paper_first(query, expected):
 
 
 @pytest.mark.xfail(
-    reason="Hybrid (RRF, equal weights) still ranks t5.pdf p.16 first: it is #1 semantic and #3 "
-    "keyword, vs the Attention paper's best chunk at #6 semantic / #1 keyword. Attention does take "
-    "3 of the top 5 (semantic alone: 2). Not tuning weights on one case; see issue #2's eval set. "
-    "Inspect with: python scripts/explain_search.py",
+    reason="Long-document bias: t5.pdf (67 pages, covers nearly every topic) wins #1 for many "
+    "plain-English questions under any fusion weight. Measured on 36 questions in evals/; "
+    "tracked as its own issue. Inspect with: python scripts/explain_search.py",
     strict=False,
 )
 @pytest.mark.parametrize(("query", "expected"), PLAIN_ENGLISH)

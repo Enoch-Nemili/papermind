@@ -20,6 +20,10 @@ log = logging.getLogger("papermind-mcp")
 
 RRF_K = 60       # standard constant from the RRF paper; damps the gap between rank 1 and rank 2
 CANDIDATES = 20  # how deep each method looks before fusing
+# Keyword votes count half as much as semantic ones. Chosen by scripts/eval_retrieval.py on
+# 36 labeled questions (see evals/results.md): w=0.5 matched semantic-only on hit@1 (78%) and
+# MRR (0.841 vs 0.838) and raised recall@5 from 94% to 97%. Equal weights (1.0) were worse.
+KEYWORD_WEIGHT = 0.5
 
 _fts_ready = False
 
@@ -29,18 +33,20 @@ def doc_key(doc):
     return doc.id or (doc.metadata.get("source"), doc.page_content)
 
 
-def rrf_fuse(rankings, k=RRF_K):
+def rrf_fuse(rankings, k=RRF_K, weights=None):
     """Fuse ranked lists of keys. Returns [(key, score)] best first.
 
-    Scores are normalized to 0-1, where 1.0 means "ranked #1 by every list that returned
-    anything". Ties keep the order of the first list (semantic), since sorting is stable.
+    `weights` scales each list's votes (default: all 1). Scores are normalized to 0-1, where
+    1.0 means "ranked #1 by every list that returned anything". Ties keep the order of the
+    first list (semantic), since sorting is stable.
     """
+    weights = weights or [1.0] * len(rankings)
     scores = {}
-    for ranking in rankings:
+    for ranking, weight in zip(rankings, weights, strict=True):
         for rank, key in enumerate(ranking, start=1):
-            scores[key] = scores.get(key, 0.0) + 1.0 / (k + rank)
-    lists_used = sum(1 for ranking in rankings if ranking)
-    best_possible = lists_used / (k + 1) if lists_used else 1.0
+            scores[key] = scores.get(key, 0.0) + weight / (k + rank)
+    used_weight = sum(w for ranking, w in zip(rankings, weights, strict=True) if ranking)
+    best_possible = used_weight / (k + 1) if used_weight else 1.0
     fused = [(key, score / best_possible) for key, score in scores.items()]
     return sorted(fused, key=lambda item: item[1], reverse=True)
 
@@ -58,7 +64,7 @@ def _keyword_docs(query, n):
         return []
 
 
-def hybrid_search(store, query, k=5, candidates=CANDIDATES):
+def hybrid_search(store, query, k=5, candidates=CANDIDATES, keyword_weight=None):
     """Return [(Document, fused_score)] for the top-k chunks from semantic + keyword search."""
     semantic = [doc for doc, _ in store.similarity_search_with_score(query, k=candidates)]
     keyword = _keyword_docs(query, candidates)
@@ -67,5 +73,7 @@ def hybrid_search(store, query, k=5, candidates=CANDIDATES):
     for doc in semantic + keyword:
         by_key.setdefault(doc_key(doc), doc)
 
-    fused = rrf_fuse([[doc_key(d) for d in semantic], [doc_key(d) for d in keyword]])
+    weight = KEYWORD_WEIGHT if keyword_weight is None else keyword_weight
+    fused = rrf_fuse([[doc_key(d) for d in semantic], [doc_key(d) for d in keyword]],
+                     weights=[1.0, weight])
     return [(by_key[key], score) for key, score in fused[:k]]
