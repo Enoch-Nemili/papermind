@@ -1,0 +1,10 @@
+{"q": "What is PagedAttention?", "paper": "vllm-pagedattention.pdf"}
+{"q": "C4 dataset cleaning heuristics", "paper": "t5.pdf"}
+{"q": "LoRA rank r applied to GPT-3 query and value matrices", "paper": "lora.pdf"}
+{"q": "BM25 baseline top-20 retrieval accuracy on Natural Questions", "paper": "dense-passage-retrieval.pdf"}
+{"q": "SBERT siamese network trained on SNLI and MultiNLI", "paper": "sentence-bert.pdf"}
+{"q": "GSM8K accuracy with chain-of-thought prompting", "paper": "chain-of-thought.pdf"}
+{"q": "RAG-Sequence versus RAG-Token", "paper": "rag-original.pdf"}
+{"q": "LLaMA-13B outperforms GPT-3", "paper": "llama.pdf"}
+{"q": "sinusoidal positional encoding", "paper": "attention-is-all-you-need.pdf"}
+{"q": "next sentence prediction NSP objective", "paper": "bert.pdf"}
