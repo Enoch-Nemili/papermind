@@ -1,0 +1,10 @@
+# Only what the MCP server imports. The Docker image installs just this file;
+# requirements.txt adds the web app and cloud-provider extras on top.
+mcp>=2,<3
+langchain-core
+langchain-postgres
+psycopg[binary]
+langchain-text-splitters
+pypdf
+fastembed
+python-dotenv
