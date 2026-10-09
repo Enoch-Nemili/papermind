@@ -1,0 +1,14 @@
+# Keep secrets, local environments and bulky data OUT of the image.
+# Secrets are passed at runtime (--env-file), never baked into image layers,
+# because anyone who gets the image could read anything copied into it.
+.env
+.venv
+.git
+data
+inbox
+tests
+frontend
+__pycache__
+*.pyc
+.pytest_cache
+.ruff_cache

@@ -11,8 +11,10 @@ Design choice: we expose RETRIEVAL, not generation. The assistant calling us is
 already a strong LLM, so we hand it the most relevant passages (with source and
 page) and let it reason. Cheaper (no second LLM call) and better answers.
 
-Run over stdio (how Claude Desktop / Claude Code / the MCP Inspector launch it):
-    .venv/bin/python app/mcp_server.py
+Run it two ways:
+    .venv/bin/python app/mcp_server.py           # stdio: an AI app on this machine launches it
+    .venv/bin/python app/mcp_server.py --http    # Streamable HTTP: a long-running network service
+                                                 # at http://127.0.0.1:8765/mcp that many clients share
 """
 
 import json
@@ -240,5 +242,23 @@ def answer_from_papers(
     )
 
 
+def main():
+    import argparse
+
+    parser = argparse.ArgumentParser(description="PaperMind MCP server")
+    parser.add_argument("--http", action="store_true",
+                        help="serve over Streamable HTTP instead of stdio")
+    parser.add_argument("--host", default="127.0.0.1",
+                        help="interface to bind (default: localhost only, so nothing else on the network can reach it)")
+    parser.add_argument("--port", type=int, default=8765)
+    args = parser.parse_args()
+
+    if args.http:
+        log.info("serving MCP over HTTP at http://%s:%d/mcp", args.host, args.port)
+        mcp.run(transport="streamable-http", host=args.host, port=args.port)
+    else:
+        mcp.run(transport="stdio")
+
+
 if __name__ == "__main__":
-    mcp.run(transport="stdio")
+    main()
