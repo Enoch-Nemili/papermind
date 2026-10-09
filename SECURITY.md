@@ -27,6 +27,7 @@ PaperMind gives an AI model tools that touch the file system and a database, so 
 | Disguised or oversized files | `.pdf` extension, size limit and `%PDF-` signature checks |
 | Excessive agency (OWASP LLM Top 10) | No delete tool and no arbitrary file access; search is read-only |
 | Unauthenticated network access | HTTP mode requires a bearer token (32+ characters, constant-time comparison) and refuses to bind a non-loopback address without one |
+| DNS rebinding | `Origin` and `Host` are validated on every HTTP request; foreign origins get 403. Configured explicitly so it also covers the Docker image's `0.0.0.0` bind |
 | Query injection | Keyword queries are reduced to alphanumeric terms; all SQL is parameterized |
 | Secrets in images or git | Secrets live in a git-ignored `.env` and are passed to containers at runtime; the image runs as a non-root user |
 

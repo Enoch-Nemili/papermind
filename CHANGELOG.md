@@ -2,6 +2,11 @@
 
 All notable changes to PaperMind. Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [Semantic Versioning](https://semver.org/).
 
+## [1.0.1] - 2026-10-09
+
+### Security
+- **DNS-rebinding protection in Docker.** The MCP SDK validates `Origin` and `Host` only when the server binds a loopback address; the Docker image binds `0.0.0.0`, so requests from any website's origin were accepted (a valid token was still required). HTTP mode now configures these checks for every bind address: foreign origins get 403, foreign `Host` headers get 421. Extra hosts and origins can be allowed with `PAPERMIND_ALLOWED_HOSTS` and `PAPERMIND_ALLOWED_ORIGINS`. Found with the `mcp-server-hardening` probe from [skillbench](https://github.com/Enoch-Nemili/skillbench); covered by tests and a CI check on the container.
+
 ## [1.0.0] - 2026-10-09
 
 First stable release: PaperMind as a tested, containerized MCP server with measured retrieval quality.
