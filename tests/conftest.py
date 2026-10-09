@@ -6,6 +6,7 @@ import pytest
 from mcp import Client
 from pypdf import PdfWriter
 
+import app.hybrid_search as hybrid
 import app.mcp_server as srv
 
 
@@ -48,6 +49,9 @@ def library(tmp_path, monkeypatch):
         return 7  # pretend the PDF became 7 chunks
 
     monkeypatch.setattr(srv, "ingest_pdf_file", fake_ingest)
+    # Keyword search hits Postgres: stub it (no matches) unless a test says otherwise.
+    monkeypatch.setattr(hybrid, "ensure_fts_index", lambda: None)
+    monkeypatch.setattr(hybrid, "keyword_search", lambda query, k: [])
     return SimpleNamespace(root=tmp_path, data=data, inbox=inbox, ingested=ingested)
 
 

@@ -8,9 +8,11 @@ anywhere, with no network and no secrets.
 
 import json
 
+import psycopg
 import pytest
 from langchain_core.documents import Document
 
+import app.hybrid_search as hybrid
 import app.mcp_server as srv
 
 pytestmark = pytest.mark.anyio
@@ -127,14 +129,13 @@ class FakeStore:
 
 
 async def test_search_papers_returns_cited_passages(client, monkeypatch):
-    hits = [
-        (Document(page_content="Attention(Q,K,V) = softmax(QK^T / sqrt(d_k)) V",
-                  metadata={"source": "/abs/path/data/attention.pdf", "page": 3}), 0.13),
-        (Document(page_content="Roman-numbered front matter",
-                  metadata={"source": "data/t5.pdf", "page": 1, "page_label": "xii"}), 0.40),
-    ]
-    store = FakeStore(hits)
+    attention = Document(page_content="Attention(Q,K,V) = softmax(QK^T / sqrt(d_k)) V",
+                         metadata={"source": "/abs/path/data/attention.pdf", "page": 3})
+    front = Document(page_content="Roman-numbered front matter",
+                     metadata={"source": "data/t5.pdf", "page": 1, "page_label": "xii"})
+    store = FakeStore([(attention, 0.13), (front, 0.40)])
     monkeypatch.setattr(srv, "get_store", lambda: store)
+    monkeypatch.setattr(hybrid, "keyword_search", lambda query, k: [(attention, 0.9)])
 
     result = await client.call_tool("search_papers", {"query": "scaled dot-product attention", "k": 2})
     passages = result.structured_content["result"]
@@ -142,11 +143,26 @@ async def test_search_papers_returns_cited_passages(client, monkeypatch):
     assert passages[0] == {
         "source": "attention.pdf",  # file name only, never the full local path
         "page": "4",                # 0-based loader page 3 -> the page a human sees
-        "relevance": 0.87,          # cosine distance 0.13 -> relevance 0.87
+        "relevance": 1.0,           # ranked #1 by BOTH semantic and keyword search
         "text": "Attention(Q,K,V) = softmax(QK^T / sqrt(d_k)) V",
     }
     assert passages[1]["page"] == "xii"  # printed page labels win when the PDF has them
-    assert store.calls == [("scaled dot-product attention", 2)]
+    assert passages[1]["relevance"] < 0.5  # found by semantic search only
+    assert store.calls == [("scaled dot-product attention", hybrid.CANDIDATES)]
+
+
+async def test_search_papers_still_works_when_keyword_search_is_down(client, monkeypatch):
+    doc = Document(page_content="text", metadata={"source": "data/bert.pdf", "page": 0})
+    monkeypatch.setattr(srv, "get_store", lambda: FakeStore([(doc, 0.2)]))
+
+    def db_down(query, k):
+        raise psycopg.OperationalError("connection refused")
+
+    monkeypatch.setattr(hybrid, "keyword_search", db_down)
+    result = await client.call_tool("search_papers", {"query": "masked language model"})
+
+    assert not result.is_error
+    assert result.structured_content["result"][0]["source"] == "bert.pdf"
 
 
 @pytest.mark.parametrize("k", [0, 11, 50])
