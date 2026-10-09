@@ -10,8 +10,8 @@ configured LLM (Ollama locally / Gemini in the cloud) answer using them.
 import os
 import sys
 
-from app.embed_store import get_vector_store
 from app.config import get_chat_model
+from app.embed_store import get_vector_store
 
 
 def answer_question(question, k=4):

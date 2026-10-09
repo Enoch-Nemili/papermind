@@ -6,11 +6,11 @@ PaperMind — EMBED and STORE.
 - get_vector_store(): connect to the pgvector collection (models + DB come from config)
 """
 
-from langchain_postgres import PGVector
 from langchain_community.document_loaders import PyPDFLoader
+from langchain_postgres import PGVector
 
+from app.config import COLLECTION, get_connection, get_embeddings
 from app.ingest import load_documents, split_documents
-from app.config import get_embeddings, get_connection, COLLECTION
 
 
 def sanitize(chunks):
