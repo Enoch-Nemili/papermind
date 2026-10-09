@@ -34,3 +34,7 @@ python-dotenv
 
 # --- Local embeddings (no API rate limits, runs anywhere) ---
 fastembed
+
+# --- MCP server: expose PaperMind as tools for AI assistants ---
+# Official Model Context Protocol SDK, pinned to the v2 line (v2 renamed FastMCP -> MCPServer).
+mcp[cli]>=2,<3
