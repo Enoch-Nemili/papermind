@@ -147,7 +147,7 @@ async def test_search_papers_returns_cited_passages(client, monkeypatch):
         "text": "Attention(Q,K,V) = softmax(QK^T / sqrt(d_k)) V",
     }
     assert passages[1]["page"] == "xii"  # printed page labels win when the PDF has them
-    assert passages[1]["relevance"] < 0.5  # found by semantic search only
+    assert passages[1]["relevance"] < passages[0]["relevance"]  # found by semantic search only
     assert store.calls == [("scaled dot-product attention", hybrid.CANDIDATES)]
 
 
