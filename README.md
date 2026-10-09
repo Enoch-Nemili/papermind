@@ -88,6 +88,8 @@ python scripts/smoke_http.py      # sends the token from .env
 
 Clients authenticate with `Authorization: Bearer <PAPERMIND_TOKEN>`. Without Docker, `python app/mcp_server.py --http` serves on `127.0.0.1:8765`; it won't bind to a network address unless a token is set.
 
+The server only accepts requests addressed to `localhost` and, when a browser sends an `Origin`, only from `localhost` pages. If you serve it under a domain, add it with `PAPERMIND_ALLOWED_HOSTS` and `PAPERMIND_ALLOWED_ORIGINS`.
+
 ## Search: how it works and how it was tuned
 
 `search_papers` runs two searches over the same chunks and merges them:
@@ -125,6 +127,7 @@ What the numbers showed:
 | Partial writes | If indexing fails, the copied file is removed |
 | Excessive agency (OWASP LLM Top 10) | The model can only *read* the library and add files the user already put in `inbox/`. It has no delete and no arbitrary file access |
 | Unauthenticated network access | HTTP mode verifies a bearer token (constant-time compare, 32+ chars) through the SDK's resource-server auth; it refuses to bind a network address without one. CI checks the container returns 401 |
+| DNS rebinding (a web page in your browser calling the local server) | `Origin` and `Host` headers are checked on every request and foreign origins get 403, as the MCP spec requires. The SDK only enables this for loopback binds, so it is configured explicitly for the Docker image's `0.0.0.0` bind. CI checks the container returns 403 |
 | Query injection | Keyword queries are reduced to alphanumeric terms before reaching `to_tsquery`; all SQL is parameterized |
 | Container | Runs as a non-root user. Secrets come from `--env-file` at runtime and are never built into the image |
 
@@ -132,6 +135,7 @@ What the numbers showed:
 
 ## Bugs found by testing
 
+- **No DNS-rebinding protection in Docker**: the MCP SDK enables `Origin` checks only when the server binds a loopback address, and the image binds `0.0.0.0`, so a request from any website's origin was accepted (with a valid token). Found by pointing [skillbench](https://github.com/Enoch-Nemili/skillbench)'s `mcp-server-hardening` probe at the container; fixed by configuring the checks for every bind address, with tests and a CI check.
 - **Path traversal in the web `/upload` endpoint**: a crafted filename could write outside `data/`. Found while writing the security tests; fixed with a regression test.
 - **Dead connections after Neon auto-suspends**: a server idle for hours failed its next search with `AdminShutdown: terminating connection due to administrator command`, because the pool reused a connection the database had killed. Found in a long-running container's logs, reproduced by restarting Postgres between two queries, and fixed with `pool_pre_ping` + `pool_recycle` ([#13](https://github.com/Enoch-Nemili/papermind/issues/13)).
 
@@ -174,6 +178,8 @@ uvicorn app.main:app --reload              # http://localhost:8000
 | `EMBED_PROVIDER`  | `fastembed` | `fastembed` · `gemini` · `ollama` |
 | `MODEL_PROVIDER`  | `ollama` | `ollama` · `gemini` (only used by the web app's `/ask`) |
 | `PAPERMIND_TOKEN` | unset | bearer token for HTTP mode; required beyond localhost |
+| `PAPERMIND_ALLOWED_HOSTS` | unset | extra `Host` values HTTP mode accepts, comma-separated (localhost is always allowed) |
+| `PAPERMIND_ALLOWED_ORIGINS` | unset | extra browser origins HTTP mode accepts, comma-separated |
 
 Secrets live only in a git-ignored `.env`. The committed `.env.example` documents every setting.
 
@@ -185,6 +191,7 @@ app/
 ├── hybrid_search.py   # semantic + keyword search fused with RRF
 ├── keyword_search.py  # Postgres full-text search (tsvector + GIN)
 ├── auth.py            # bearer-token verifier for HTTP mode
+├── http_security.py   # Origin/Host checks against DNS rebinding
 ├── retrieval_metrics.py
 ├── embed_store.py     # pgvector storage, ingestion, connection pooling
 ├── pdf_loader.py      # PDF -> per-page documents with citation metadata
@@ -196,7 +203,7 @@ evals/                 # labeled questions + latest results
 scripts/               # eval, search explainer, HTTP smoke test
 tests/                 # protocol, security, auth, fusion, metrics, API tests
 Dockerfile             # multi-stage, non-root MCP server image
-.github/workflows/     # CI: lint + tests (3.12, 3.14) + Docker build and auth checks
+.github/workflows/     # CI: lint + tests (3.12, 3.14) + Docker build, auth and Origin checks
 ```
 
 ## Roadmap
@@ -207,6 +214,7 @@ Dockerfile             # multi-stage, non-root MCP server image
 - [x] Streamable HTTP transport + multi-stage Docker image
 - [x] Hybrid retrieval with a labeled eval set and measured tuning
 - [x] Bearer-token auth for HTTP mode
+- [x] DNS-rebinding protection (Origin/Host checks) for every bind address
 - [x] Off deprecated `langchain-community` (verified identical text and vectors)
 - [ ] Long-document bias: per-paper diversity or length normalization ([#9](https://github.com/Enoch-Nemili/papermind/issues/9))
 - [ ] Full OAuth via a JWT `TokenVerifier`

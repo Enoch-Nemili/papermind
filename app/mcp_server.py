@@ -39,6 +39,7 @@ from pypdf import PdfReader
 
 from app.auth import auth_options
 from app.embed_store import get_vector_store, ingest_pdf_file
+from app.http_security import transport_security
 from app.hybrid_search import hybrid_search
 
 # IMPORTANT: over stdio, stdout IS the protocol channel between client and server.
@@ -266,7 +267,13 @@ def main():
     if args.http:
         auth = "bearer token required" if os.getenv("PAPERMIND_TOKEN") else "NO AUTH (localhost only)"
         log.info("serving MCP over HTTP at http://%s:%d/mcp (%s)", args.host, args.port, auth)
-        mcp.run(transport="streamable-http", host=args.host, port=args.port)
+        # Origin/Host checks against DNS rebinding, on for every bind address (app/http_security.py).
+        mcp.run(
+            transport="streamable-http",
+            host=args.host,
+            port=args.port,
+            transport_security=transport_security(),
+        )
     else:
         mcp.run(transport="stdio")
 
