@@ -3,6 +3,7 @@
 **Give any AI assistant a searchable, citable library of research papers.** PaperMind indexes PDFs into PostgreSQL + pgvector and exposes them through the **Model Context Protocol (MCP)**, so Claude Desktop (or any MCP client) can search your papers and answer with *(paper, page)* citations. The same retrieval also powers a FastAPI web app.
 
 [![CI](https://github.com/Enoch-Nemili/papermind/actions/workflows/ci.yml/badge.svg)](https://github.com/Enoch-Nemili/papermind/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/Enoch-Nemili/papermind)](https://github.com/Enoch-Nemili/papermind/releases)
 ![Python](https://img.shields.io/badge/Python-3.12%20%7C%203.14-blue)
 ![MCP](https://img.shields.io/badge/MCP-Python%20SDK%20v2-8A2BE2)
 ![pgvector](https://img.shields.io/badge/PostgreSQL-pgvector-336791)
@@ -217,6 +218,10 @@ Dockerfile             # multi-stage, non-root MCP server image
 - Email: [enoch.das@gmail.com](mailto:enoch.das@gmail.com)
 - GitHub: [@Enoch-Nemili](https://github.com/Enoch-Nemili)
 - LinkedIn: [enoch-nemili](https://www.linkedin.com/in/enoch-nemili/)
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for setup and conventions, [CHANGELOG.md](CHANGELOG.md) for release history, and [SECURITY.md](SECURITY.md) to report a vulnerability.
 
 ## License
 
