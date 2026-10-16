@@ -28,8 +28,8 @@ def load_documents():
 def split_documents(documents):
     """Chop the page-documents into smaller, overlapping chunks."""
     splitter = RecursiveCharacterTextSplitter(
-        chunk_size=2000,       # aim for ~1000 characters per chunk
-        chunk_overlap=200,     # repeat 150 chars between neighbours so ideas aren't cut in half
+        chunk_size=2000,       # up to 2,000 characters per chunk (a paragraph or two)
+        chunk_overlap=200,     # repeat 200 chars between neighbours so ideas aren't cut in half
         add_start_index=True,  # record where each chunk started within its page
     )
     chunks = splitter.split_documents(documents)
