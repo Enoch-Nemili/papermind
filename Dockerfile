@@ -8,7 +8,7 @@
 # image starts clean and copies only the results, so installer leftovers never ship.
 
 # ---------------------------------------------------------------- stage 1: build ---
-FROM python:3.12-slim AS builder
+FROM python:3.14-slim AS builder
 
 ENV PIP_NO_CACHE_DIR=1 PIP_DISABLE_PIP_VERSION_CHECK=1
 
@@ -25,7 +25,7 @@ ENV FASTEMBED_CACHE_PATH=/opt/models
 RUN python -c "from fastembed import TextEmbedding; TextEmbedding('BAAI/bge-small-en-v1.5')"
 
 # -------------------------------------------------------------- stage 2: runtime ---
-FROM python:3.12-slim
+FROM python:3.14-slim
 
 # Run as an unprivileged user, never as root.
 RUN useradd --create-home app && mkdir -p /app/data /app/inbox && chown -R app:app /app
